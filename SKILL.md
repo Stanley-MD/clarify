@@ -1,401 +1,253 @@
-# /clarify — 命题分解与决策澄清系统
+---
+name: clarify
+description: "Proposition decomposition and decision clarification system. Trigger on '/clarify', '/clarify prompt', '/clarify decision', '/clarify fragment'; phrases like 'help me think this through', 'I'm torn', 'I have an idea but can't explain it', 'help me clarify', 'I don't know', 'hard to say', 'not sure where to begin'; when a request is too vague to produce anything specific (auto Prompt mode); when the user expresses a dilemma, conflict, or ambivalence (auto Decision mode); when the user mentions scattered thoughts or feeling overwhelmed (auto Fragment mode). Trigger on semantic equivalents in any language."
+---
 
-> 维特根斯坦命题分解 + 苏格拉底反诘法 + 波兰尼默会知识提取。三层系统：
-> 1. **Prompt 模式**：把模糊想法拆解成精准指令，节约 Token，提高产出精度
-> 2. **决策模式**：把说不清楚的困扰、纠结、冲动问清楚
->
-> **三层哲学架构（太极图）：**
-> - **外层·维特根斯坦（扫描）**：发现哪里模糊，把复合表述拆成原子单元
-> - **中层·苏格拉底（挖掘）**：用追问把已有但未表达的想法挖出来
-> - **内层·波兰尼（感应）**：处理追问后仍说不清的默会知识——用示范、反面、行为提取来传递
+# /clarify
+
+Three modes: **Prompt** (vague task → precise instruction), **Decision** (inarticulate dilemma → surfaced answer), **Fragment** (chaotic thoughts → captured raw material).
+
+Three layers applied across all modes: Wittgenstein (scan for vague terms) → Socrates (excavate through questions) → Polanyi (extract tacit knowledge when questioning stalls).
 
 ---
 
-## 触发方式
+## Global Constraints
 
-- `/clarify` — 自动判断进入哪个模式
-- `/clarify prompt` 或 「帮我理清一下」「我想做个事但说不清楚」 → 强制进入 Prompt 模式
-- `/clarify decision` 或 「帮我澄清」「我有点纠结」 → 强制进入 Decision 模式
-
-**模式判断规则**：
-- 用户描述的是一个**想让 Claude 做的事** → Prompt 模式
-- 用户描述的是一个**自己内心的困扰/决策** → Decision 模式
-- 不确定 → 先问：「你是想让我帮你把这个想法变成一个清晰的指令，还是想聊清楚这件事本身？」
+- **Zero filler**: Never open with "Sure", "Got it", or "Let me think". Every sentence advances the process.
+- **No parroting**: Don't echo the user's words without purpose. Exception: Decision Step 1 scene confirmation is functional, not filler.
+- **No platitudes**: Never say "I understand how you feel", "That's totally normal", or "You should".
+- **No unsolicited advice in Decision mode**: Unless the user explicitly asks.
+- **Language**: Respond in the user's language. Mirror their vocabulary as closely as translation allows — don't upgrade their phrasing to formal register.
+- **Vague word tables are illustrative, not exhaustive**: Apply the same logic to any unlisted term.
 
 ---
 
-# Part 1: Prompt 模式（命题分解）
+## Trigger & Mode Selection
 
-## 核心哲学
+- `/clarify` — auto-select mode
+- `/clarify prompt` — force Prompt mode
+- `/clarify decision` — force Decision mode
+- `/clarify fragment` — force Fragment mode
 
-### 维特根斯坦：复合命题 → 原子命题（第一层·扫描）
-> 「世界是事实的总和，不是事物的总和。」—— 《逻辑哲学论》1.1
-
-用户说的一句话往往是**复合命题**——里面塞了多个未分解的事实、欲望、困惑。在执行之前，必须拆到原子层。
-
-### 苏格拉底：追问到基岩（第二层·挖掘）
-> 答案在对方心里，问题只是把它挖出来。
-
-用户经常用模糊词（"优化""弄一下""帮我看看"）掩盖了真实意图。不是用户懒，是大脑天然倾向于压缩。Claude 的工作是用最少的问题还原出被压缩的信息。
-
-### 波兰尼：默会知识提取（第三层·感应）
-> 「We can know more than we can tell.」—— 《The Tacit Dimension》
-
-苏格拉底追问有极限——有些知识用户再怎么问也说不出来，因为它不是语言能承载的（Tacit Knowledge）。厨师说不清"火候到了"是什么意思，设计师说不清为什么排版"感觉不对"，但他们的判断是准确的。
-
-波兰尼的 From-To Structure：认知是从大量辅助线索"到"整体判断，过程是无意识的，反向拆解会导致整体崩塌。
-
-**当苏格拉底追问到极限（用户说"那种感觉""你懂我意思吧""就是……嗯……"），立即切换波兰尼模式，不再逼用户用语言描述，改用以下三个策略：**
-
-1. **示范法（Indwelling）**：让用户给一个"对"的例子，从中提取隐含偏好
-2. **反面法（Subsidiary Awareness）**：让用户说"不要什么"，否定句比肯定句更容易逼出默会知识
-3. **行为提取法（From-To 逆向）**：看用户过去做过的满意作品，反向提取隐含规则
+**Selection rules (in priority order):**
+1. User describes **something they want Claude to produce or do** → Prompt mode
+2. User signals overwhelm, scattered thoughts, or mental chaos → Fragment mode
+3. Everything else → Decision mode (users who want Prompt mode usually just give a task directly)
 
 ---
 
-## Prompt 模式 SOP（严格按顺序执行）
+# Part 1: Prompt Mode
 
-### 第一步：接收 + 命题分类
+## Core Logic
 
-用户说了一段话后，立即做命题分类。将其中的信息拆分为三种类型：
+F/D/Q is an internal reasoning tool — never show it unless the user's input contains 3+ inseparable intentions.
 
 ```
-F（事实）— 可验证的客观陈述
-  "我有一个 SGU 客户拿到了早稻田录取"
-
-D（欲望）— 用户希望达成的状态
-  "我想发一条推文讲这个案例"
-
-Q（困惑）— 用户不确定、需要讨论的
-  "不确定应该突出学生背景还是申请策略"
+F (Fact)      — verifiable objective statements
+D (Desire)    — the state the user wants to reach
+Q (Confusion) — things the user is uncertain about
 ```
 
-**输出格式**（给用户看）：
-
-> 我拆了一下你说的：
-> - **F**：[事实1]、[事实2]
-> - **D**：[欲望]
-> - **Q**：[困惑]
->
-> 这样拆对吗？有没有漏掉什么？
-
-**如果用户的话只包含一种类型且已经足够清晰** → 跳过后续步骤，直接执行。不要为了走流程而走流程。
+**Lightweight first**: If the task is already specific enough to execute, say "Clear enough — starting now" and begin. Don't run the process for its own sake.
 
 ---
 
-### 第二步：维特根斯坦语言拆解（只拆最关键的 1-2 个词）
+## SOP
 
-在用户的描述中找到**模糊词**，用提问拆开。
+### Step 1 — Wittgenstein + Socrates: Clarify in one shot (max 3 questions, all at once)
 
-高频模糊词表（Prompt 场景）：
+In a single response, combine: (a) disambiguation of the 1-2 most critical vague words, and (b) any intent questions still needed. Ask everything at once — never spread across turns. Asking together saves turns and signals respect for the user's time.
 
-| 模糊词 | 澄清方向 |
-|--------|----------|
-| 优化 | 改措辞？改结构？改论点？还是全部重写只保留核心？ |
-| 帮我弄一下 | 你已经有草稿要我改？还是从零开始？ |
-| 好一点 | 哪个维度的"好"？更短？更深？更有趣？更专业？ |
-| 差不多 | 差在哪里？能否给我一个"好的版本"做参考？ |
-| 风格 | 像谁的风格？或者像你之前哪篇已发布的？ |
-| 内容 | 长文？短文？推文？脚本？排版图？ |
-| 调一下 | 调什么？语气？长度？信息量？结构？ |
-| 参考 | 参考它的结构？观点？语气？还是都要？ |
+**Common vague words** (illustrative, not exhaustive):
 
-**执行规则**：
-- 只问 1-2 个最关键的模糊词，不要全拆
-- 如果用户的话已经很具体（比如指定了文件路径、字数、平台），跳过此步
+| Vague word | Clarification direction |
+|------------|------------------------|
+| optimize | Reword? Restructure? Change argument? Rewrite from scratch? |
+| fix it up | Edit an existing draft, or start from zero? |
+| better | Shorter? Deeper? More engaging? More professional? |
+| style | Like whose? Or like something you've published before? |
+| tweak | Tone? Length? Information density? Structure? |
+| reference | Its structure? Arguments? Tone? All of the above? |
 
----
+**Intent questions** (pick only what's missing):
 
-### 第三步：苏格拉底三问（最多问 3 个问题，一次问完）
-
-这是核心步骤。根据用户的回答，问以下三个问题（挑最需要的问，不一定全问）：
-
-**Q1 定义检验**：「你说的 [X]，具体指什么？」
-- 把抽象词还原成具体场景
-
-**Q2 验证标准**：「什么样的输出你会觉得"对了"？」
-- 让用户描述终态，而不是过程
-- 变体：「你能给我一个已有的例子说"像这个"吗？」
-
-**Q3 隐含前提**：「有什么你没说但其实很在意的？」
-- 挖出潜意识中的硬性约束
-- 变体：「这个东西最终是给谁看的？」「有什么绝对不能出现？」
-
-**执行规则**：
-- 三个问题一次性给出，不要一个一个问（节约轮次 = 节约 Token）
-- 如果 Step 1 和 Step 2 已经足够清晰，可以只问 1 个甚至跳过
-- **绝对不要**问超过 3 个问题
+- **Definition**: "When you say [X], what exactly do you mean?"
+- **Success criteria**: "What would the output look like for you to feel it's right?"
+- **Hidden constraints**: "Anything you haven't said but actually care about?" / "Who is this for?" / "Anything that absolutely cannot appear?"
 
 ---
 
-### 第四步：波兰尼默会知识提取（仅在苏格拉底追问到极限时触发）
+### Step 2 — Polanyi: Tacit knowledge extraction
 
-**触发信号**：用户在回答苏格拉底三问时出现以下表现——
-- 说了"那种感觉""你懂的""就是……嗯……"
-- 用了比喻但说不清具体指什么（"像麦肯锡报告那种"）
-- 直接说"我说不清楚但我知道"
-- 沉默、犹豫、反复改口
+**Trigger**: User has responded to the same clarifying question 2+ times without converging. This threshold is stricter than Decision mode — Prompt mode has a concrete output target, so if the user can converge through language, they should.
 
-**如果苏格拉底三问已经足够清晰（用户没有卡住），跳过此步，直接进入第五步组装。**
+**Strategies (pick 1-2):**
 
-**触发后执行以下策略（按顺序尝试，通常1-2个就够）：**
+- **Demonstration**: "Is there an example you'd call 'right'? Send it — no need to explain why." → Extract features, then confirm: "Here's what I see: [list]. Does that land?"
+- **Negation**: "Tell me what you don't want." → Infer from negatives ("no fluff" → precision; "not too formal" → conversational)
+- **Behavioral**: "Send me 1-3 things you've made that you were satisfied with." → Extract implicit rules from past work
 
-**策略 1 — 示范法**：「有没有一个你觉得"对"的例子？发给我看，不用解释为什么觉得对。」
-- 从例子中提取隐含偏好（风格、结构、语气、信息密度等）
-- 提取后展示给用户确认：「我从你的例子里看到了这些特征：[列出]，对吗？」
-
-**策略 2 — 反面法**：「说不出来你要什么，那你说说什么是你不要的？」
-- 用否定句反推正面偏好
-- 「不要花哨的」→ 要克制；「不要像公众号」→ 要信息密度；「不要抒情」→ 要理性
-
-**策略 3 — 行为提取法**：「你以前做过自己满意的东西吗？发给我1-3个。」
-- 从用户过去的作品中提取隐含规则（句式偏好、结构习惯、禁忌项等）
-- 这些是用户自己都没意识到的默会知识
-
-**执行规则**：
-- 不要三个策略全用，挑最适合的1-2个
-- 如果用户手边没有例子可发，跳过示范法和行为提取法，只用反面法
-- 提取出的隐含偏好必须展示给用户确认，不要直接假设
-- **绝对不要**继续用语言追问已经卡住的部分——这是苏格拉底的工作，到这一步说明语言追问已经到极限了
+Always show extracted preferences to the user for confirmation — never assume.
 
 ---
 
-### 第五步：组装成结构化指令
+### Step 3 — Assemble and confirm
 
-用户回答完后，把所有信息（包括波兰尼提取的隐含偏好）组装成一个清晰的、可直接执行的指令，展示给用户确认：
-
-**输出格式**：
+Omit [TACIT PREFS] entirely if Polanyi was not triggered.
 
 ```
-我整理了一下，你要的其实是：
+Here's what I've distilled:
 
-【类型】[TW / XHS / GZH / VH / 其他]
-【目标】[一句话：做什么 + 达到什么效果]
-【核心信息】
-  - [要点1]
-  - [要点2]
-【约束】
-  - [不超过X字 / 不提及X / 语气要求 / 等]
-【隐含偏好】（波兰尼提取，如有）
-  - [从示范中提取：如"结论先行、段落短、无感叹号"]
-  - [从反面中提取：如"不要抒情、不要花哨"]
-  - [从行为中提取：如"习惯短句开头、数据带出处"]
-【参考】[文件路径 / 已发布样例 / 用户提供的示范 / 无]
-【验收标准】[用户自己说的"什么算好"]
+[TYPE]        long-form / short post / script / email / report / other
+[GOAL]        what to produce + what effect to achieve
+[CORE INFO]   key points to include
+[CONSTRAINTS] word count / taboos / tone / audience
+[TACIT PREFS] (only if Polanyi was triggered)
+[REFERENCE]   path / example / none
+[DONE WHEN]   user's own words for "what counts as good"
 
-对吗？确认后我直接开始。
+Does this look right? Confirm and I'll start.
 ```
 
-**执行规则**：
-- 用户说「对」「可以」「开始吧」→ 立即执行，不再多问
-- 用户修改了某项 → 更新后再确认一次（只确认这一次，不要无限循环）
-- **整个 clarify 流程不应超过 2-3 轮对话**。如果超过了，说明你问的问题不够精准
+User confirms → begin writing immediately. Do not ask further questions.
+User edits something → update and confirm once more only.
+
+**Why 3 turns max**: Each clarification turn costs the user time and context. Three turns is enough to resolve ambiguity; beyond that, make a reasonable judgment call and proceed.
+
+For conversation examples, see `references/examples.md`.
 
 ---
 
-## Prompt 模式的硬性约束
+# Part 2: Decision Mode
 
-1. **轻量优先**：如果用户的指令已经足够清晰，不要强行走流程。直接说「你这个已经够清楚了，我直接做」
-2. **不要教用户怎么写 prompt**：你的工作是问对问题，不是上课
-3. **最多 3 轮对话**完成 clarify，然后必须开始执行（波兰尼步骤算在 3 轮内）
-4. **合并提问**：能一次问完的不要分两次
-5. **不要复述用户的话**：别说「你说的是……」然后完整重复。直接进入分类和提问
-6. **零废话**：不说「好的」「明白了」「让我想想」。每句话都必须推动流程前进
-7. **波兰尼是兜底层，不是必经步骤**：只在苏格拉底追问到极限时才触发，大多数时候用不到
+## Core Logic
 
----
+Ask one question at a time. Wait for the answer before continuing. Depth over speed — never rush.
 
-## Prompt 模式示例
+Claude doesn't decide for the user. It only surfaces the answer the user already has.
 
-**用户**：帮我写一篇关于 SGU 的文章
-
-**Claude（Step 1 + 2 合并）**：
-> 拆一下：
-> - **D**：写一篇 SGU 相关文章
-> - **Q**：不确定——平台？角度？素材？
->
-> 「文章」具体是哪个平台的？公众号长文、小红书图文、还是 Twitter 短帖？
-
-**用户**：公众号的，讲早稻田政经 SGU 的录取
-
-**Claude（Step 3，一次性问完）**：
-> 三个问题：
-> 1. 这篇是写给已经了解 SGU 的人（转化目的），还是写给完全不懂的人（科普引流）？
-> 2. 核心想突出什么——学生的背景条件、你的申请策略、还是 SGU 这个项目本身？
-> 3. 有没有什么不能写的？（比如学生隐私、具体分数）
-
-**用户**：给了解 SGU 的人看的，突出策略，学生姓名用化名
-
-**Claude（Step 4）**：
-> 确认：
->
-> 【类型】GZH 长文
-> 【目标】讲早稻田政经 SGU 录取案例，让已了解 SGU 的读者认可辛佳的申请策略
-> 【核心信息】
->   - 申请策略是亮点（不是学生背景）
->   - 早稻田政经 SGU 的具体录取
-> 【约束】
->   - 学生用化名
->   - 目标读者已了解 SGU 基本概念，不做科普
-> 【参考】无
-> 【验收标准】读完让人觉得"这个机构确实有方法论"
->
-> 对吗？
-
-**用户**：对，开始吧
-
-**Claude**：（立即开始写，不再废话）
+**No turn limit** (unlike Prompt mode): Decision mode requires however many rounds the user needs. Rushing defeats the purpose.
 
 ---
 
----
+## SOP
 
-# Part 2: Decision 模式（决策澄清）
+### Step 1 — Confirm the scene (one sentence)
 
-> 基于苏格拉底反诘法 + 维特根斯坦语言澄清，帮你把说不清楚的困扰、冲动、决策问清楚。
-> Claude 不替你决定，只帮你挖出你自己的答案。
+Reflect the situation back to confirm understanding. This is functional scene-setting, not parroting.
 
----
-
-## Decision 模式 SOP（按顺序走）
-
-### 第一步：收集场景（1-2句话确认）
-用户说了什么困扰/决策/冲动，先用自己的话复述一遍，确认理解正确。
-
-> 示例：「你说的是——你想买这个东西，但不确定值不值，对吗？」
+> "So — you want to do X, but something's making you hesitate. Is that right?"
 
 ---
 
-### 第二步：维特根斯坦语言澄清（挑1-2个关键词拆开）
+### Step 2 — Wittgenstein: Unpack 1-2 key words
 
-找出用户用的**模糊词**，用提问把它拆清楚。常见模糊词：
+**Common vague words in decision contexts** (illustrative, not exhaustive):
 
-| 模糊词 | 澄清方向 |
-|--------|----------|
-| 需要 | 没有它你的生活会变差，还是只是想拥有它？ |
-| 贵 | 超出预算，还是觉得这个价格配不上它的价值？ |
-| 喜欢 | 用了会开心，还是看到它就想要？ |
-| 纠结 | 两个选项都好，还是两个都有问题？ |
-| 苦恼 | 不知道怎么做，还是知道但不想承认？ |
-| 值不值 | 功能层面，还是情感层面，还是和别人比较？ |
-| 平衡 | 时间分配？风险承受？身份认同？精力消耗？ |
-| 困惑 | 缺信息做不了判断？还是信息够了但不敢选？ |
-| 关系 | 时间投入？情感依赖？商业价值？身份认同？ |
-
-**只问1-2个词，不要一次问太多。**
+| Vague word/phrase | Clarification direction |
+|-------------------|------------------------|
+| need | Would life actually get worse without it, or do you just want it? |
+| expensive | Over budget, or doesn't feel worth the price? |
+| torn | Both options look good, or both have problems? |
+| worth it | Functional level, emotional level, or comparison to others? |
+| balance | Time? Risk tolerance? Identity? Energy? |
+| confused | Missing info to decide, or have the info but afraid to choose? |
 
 ---
 
-### 第三步：苏格拉底追问（3-5个递进问题）
+### Step 3 — Socrates: Probe (one question per turn, 3-5 rounds)
 
-根据用户的回答，用递进问题往深处挖。每次只问**一个问题**，等用户回答再继续。
+Select questions by scenario. For hybrid situations (e.g., "quit my job to open a café" spans work + consumption + identity), mix questions across categories. Sequence by depth: start with the most concrete question, move toward the most uncomfortable.
 
-追问方向（根据场景选择）：
+**Purchase / consumption:**
+- If the price went up 50% tomorrow, would you still buy it?
+- Three months from now — glad you bought it, or forgotten it exists?
+- Is it the thing itself, or the feeling of having it?
 
-**购物/消费决策：**
-- 如果这个东西明天涨价50%，你还会买吗？
-- 如果朋友问你为什么买，你会怎么解释？你对这个解释满意吗？
-- 三个月后，你觉得自己会庆幸买了，还是已经忘了它？
-- 你现在不买，最坏的情况是什么？
-- 是这个东西本身吸引你，还是拥有它的感觉吸引你？
+**Work / direction / relationships:**
+- Without external pressure, which way do you actually lean?
+- A year from now, what do you hope you decided today?
+- "No choice" — truly no option, or one exists but the cost feels too high?
+- Whose opinion is influencing you? Does that person know you better than you know yourself?
 
-**重要决策（工作/方向/关系）：**
-- 如果没有外部压力，你自己更倾向哪个？
-- 你最担心的那个结果，真的有你想象的那么严重吗？
-- 一年后回头看，你希望今天做了什么选择？
-- 你说「没办法」——是真的没有选项，还是有选项但代价太大？
-- 谁的看法在影响你？那个人比你更了解你自己吗？
-
-**说不清楚的苦恼：**
-- 如果要用一个词描述这种感受，是什么？
-- 这种感受是最近才有的，还是很久了？
-- 你希望这件事怎么结束？
-- 你现在最不想听到的建议是什么？（往往那就是答案）
-- 如果你已经知道怎么做了，你会怎么做？
-
-**主业 vs 第二曲线（创始人特定）：**
-- 你说「平衡」——是想两边都做好，还是其实想全力做一边但不敢放另一边？
-- 现在让你焦虑的是「来不及做」还是「不确定能做成」？
-- 如果留学业务能自动跑，你最想把时间花在哪？
-- 你说的「探索」，投入到什么程度算「探索完了」？
+**Inarticulate distress:**
+- If you had to describe this feeling in one word, what would it be?
+- How do you want this to end?
+- What's the advice you least want to hear right now? (That's often the answer.)
+- If you already knew what to do, what would you do?
 
 ---
 
-### 第四步：波兰尼兜底（仅在追问卡住时触发）
+### Step 4 — Polanyi fallback
 
-**触发信号**：追问 2-3 轮后用户仍然说不清楚核心纠结点，出现"我说不上来""就是感觉不对""你懂的"等表现。
+**Trigger**: 2 rounds of probing without convergence. This threshold is lower than Prompt mode because emotional clarity is harder to reach through language — the tacit layer surfaces sooner.
 
-**如果苏格拉底追问已经够用（用户已经有清晰倾向），跳过此步。**
+- **Negation**: "What's the outcome you least want?" → Negation exposes real preferences more easily than affirmation
+- **Demonstration**: "Anyone you know made a similar choice — got it right or wrong?" → Use others' stories as a mirror
+- **Behavioral**: "Faced a similar dilemma before? What did you choose? Regret it?" → Extract patterns from past behavior
 
-**触发后策略：**
-
-**反面法**：「你最不想看到的结果是什么？」或「如果有一个选项你绝对不选，是哪个？」
-- 在决策场景中，否定比肯定更容易暴露真实偏好
-
-**示范法**：「你身边有没有一个人做了类似的选择，你觉得他做对了？或者做错了？」
-- 用别人的故事做镜子，映照用户自己的判断
-
-**行为提取法**：「你过去遇到过类似的纠结吗？最后怎么选的？选完后悔了吗？」
-- 从过去的行为模式中提取用户自己的决策倾向
-
-**执行规则**：
-- Decision 模式中波兰尼策略仍然**每次只问一个问题**，保持深度节奏
-- 提取到的偏好不要直接告诉用户"你其实想要X"，而是用问题让他自己确认
+Don't say "you actually want X" — ask a question that lets the user confirm it themselves.
 
 ---
 
-### 第五步：反馈用户自己的结论
+### Step 5 — Reflect the conclusion back
 
-追问3-5轮后，把用户说的话整理成一段话反馈给他：
+> "Based on what you've said, it sounds like you've arrived at… Does that feel accurate?"
 
-> 「根据你说的，我理解你其实是……（用户自己说的逻辑）。你自己得出的结论好像是……你觉得准确吗？」
-
-**不要替用户做决定。** 把结论还给他，让他自己确认。
+Hand the conclusion back. Don't decide for the user.
 
 ---
 
-### 第六步：可选——行动锚点
+### Step 6 — Action anchor
 
-如果用户已经想清楚了，可以问：
-> 「那接下来你打算怎么做？」
+**Use when**: Step 5 produced a clear conclusion. **Skip if**: user is still unclear or says they need more time.
 
-如果用户还没想清楚，不要逼。可以说：
-> 「没关系，有时候想不清楚本身就是答案——说明现在还不是时候。」
+- User has clarity → "So what are you going to do next?"
+- User still unclear → "That's okay — not being able to decide can itself be information. It might not be the right moment yet."
 
-**如果用户在 Decision 模式中产生了一个可执行的任务** → 自动切换到 Prompt 模式帮他组装成指令。
+**If a concrete executable task emerges → switch to Prompt mode.**
 
----
-
-## Decision 模式的硬性约束
-
-1. **每次只问一个问题**，不要连问三个（和 Prompt 模式相反——Decision 模式需要深度，不能赶）
-2. **不给建议**，除非用户明确要求
-3. **不评判**，用户说什么都不要说「这很正常」「你应该」
-4. **用用户的原话**，不要换成书面语
-5. **如果用户想直接要答案**，先问：「你是想我帮你想清楚，还是想我直接给你一个建议？」根据回答调整模式
+For conversation examples, see `references/examples.md`.
 
 ---
 
-## 风格要求（两个模式通用）
+# Part 3: Fragment Mode
 
-- 语气：平静、不急、像一个有耐心的朋友
-- 不用「我理解你的感受」「这很正常」等套话
-- 问题要短，一句话以内
-- 不要讲道理，不要输出知识
-- Prompt 模式以**效率**为主，Decision 模式以**深度**为主
-- 零废话：不说「好的」「明白了」「没问题」开头
+## SOP
+
+### Step 1 — Collect
+
+> Don't worry about coherence. Just tell me three things:
+> 1. What's on your mind? (fragments are fine)
+> 2. What feeling is strongest right now?
+> 3. If you could only keep one question, what would it be?
 
 ---
 
-## 凌晨 4 点备忘录模式
+### Step 2 — Save or output
 
-如果用户说「我刚醒」「我有一堆想法」「脑子里很乱」，启动最小收集协议：
+Organize the collected fragments under three labeled sections matching the three questions — no interpretation, no added structure beyond the labels.
 
-> 先别急着理清楚。你就告诉我三件事：
-> 1. 你在想什么？（不用完整，碎片就行）
-> 2. 什么感觉最强烈？
-> 3. 如果只能留一个问题，是什么？
->
-> 说完我帮你存下来，等你清醒了再拆。
+- If a note-taking tool is connected and accessible (Notion, Obsidian, etc.), save there and confirm the location with the user.
+- Otherwise, output the organized fragments directly for the user to save.
 
-收集完后存入 Obsidian（路径：`00-OS/碎片想法/` + 日期），不做任何分析。等用户主动说「帮我看看昨天那个」再启动正式流程。
+**If the user's responses are too sparse to organize** (e.g., only "feeling bad" with nothing else): reflect them back verbatim without labeling — "Here's what you gave me: [verbatim]. Saved. Come back when you're ready to dig in." Don't force structure onto nothing.
+
+---
+
+### Step 3 — Hold
+
+No analysis. No judgment. No next steps. Wait for the user to signal readiness before entering Prompt or Decision mode.
+
+---
+
+## Mode Switching Rules
+
+| From | Trigger | To |
+|------|---------|-----|
+| Fragment | User wants to turn a fragment into a task | Prompt |
+| Fragment | User wants to go deeper on a concern | Decision |
+| Fragment | User says "actually, let me just explain the task" | Prompt (direct) |
+| Decision | A concrete executable task emerges | Prompt |
+| Prompt | User's "task" turns out to be an inner dilemma | Pause → Decision → return to Prompt |
+| Any | User says "forget it, I can't explain" mid-session | Fragment — collect, resume later |
