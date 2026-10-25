@@ -1,6 +1,7 @@
 ---
 name: clarify
-description: "Proposition decomposition and decision clarification system. Trigger on '/clarify', '/clarify prompt', '/clarify decision', '/clarify fragment'; phrases like 'help me think this through', 'I'm torn', 'I have an idea but can't explain it', 'help me clarify', 'I don't know', 'hard to say', 'not sure where to begin'; when a request is too vague to produce anything specific (auto Prompt mode); when the user expresses a dilemma, conflict, or ambivalence (auto Decision mode); when the user mentions scattered thoughts or feeling overwhelmed (auto Fragment mode). Trigger on semantic equivalents in any language."
+argument-hint: "[prompt | decision | fragment]"
+description: "Proposition decomposition and decision clarification: Wittgenstein scan → Socratic excavation → Polanyi tacit-knowledge extraction. Three modes: Prompt (vague task → precise instruction), Decision (inarticulate dilemma → surfaced answer), Fragment (chaotic thoughts → captured raw material). Use when the user types '/clarify', '/clarify prompt', '/clarify decision', '/clarify fragment'; phrases like 'help me think this through', 'I'm torn', 'I have an idea but can't explain it', 'help me clarify', 'I don't know', 'hard to say', 'not sure where to begin'; when a request is too vague to produce anything specific (auto Prompt mode); when the user expresses a personal dilemma, conflict, or ambivalence (auto Decision mode); when the user mentions scattered thoughts or feeling overwhelmed (auto Fragment mode); semantic equivalents in any language. Boundary: an already-articulate plan that needs stress-testing goes to grilling/grill-me — clarify is for thought that cannot yet be articulated."
 ---
 
 # /clarify
@@ -30,9 +31,11 @@ Three layers applied across all modes: Wittgenstein (scan for vague terms) → S
 - `/clarify fragment` — force Fragment mode
 
 **Selection rules (in priority order):**
-1. User describes **something they want Claude to produce or do** → Prompt mode
+1. User describes **something they want the assistant to produce or do** → Prompt mode
 2. User signals overwhelm, scattered thoughts, or mental chaos → Fragment mode
 3. Everything else → Decision mode (users who want Prompt mode usually just give a task directly)
+
+**Agent-session guard**: in a coding/agent session, vagueness about technical work (code, specs, docs, tasks) always stays in Prompt mode. Decision mode is reserved for personal dilemmas — spending, career, relationships, life choices — not architecture choices.
 
 ---
 
@@ -124,7 +127,7 @@ For conversation examples, see `references/examples.md`.
 
 Ask one question at a time. Wait for the answer before continuing. Depth over speed — never rush.
 
-Claude doesn't decide for the user. It only surfaces the answer the user already has.
+The assistant doesn't decide for the user. It only surfaces the answer the user already has.
 
 **No turn limit** (unlike Prompt mode): Decision mode requires however many rounds the user needs. Rushing defeats the purpose.
 
@@ -228,8 +231,9 @@ For conversation examples, see `references/examples.md`.
 
 Organize the collected fragments under three labeled sections matching the three questions — no interpretation, no added structure beyond the labels.
 
-- If a note-taking tool is connected and accessible (Notion, Obsidian, etc.), save there and confirm the location with the user.
-- Otherwise, output the organized fragments directly for the user to save.
+- If a note-taking tool the user actually uses is connected and reachable (Notion, Obsidian, etc.), save there and confirm the location with the user.
+- In an agent session with workspace access, write the fragments to a markdown file and report the path — default `.scratch/fragments-<date>.md` in the current workspace unless the user names another location.
+- With no file access at all, output the organized fragments directly for the user to save.
 
 **If the user's responses are too sparse to organize** (e.g., only "feeling bad" with nothing else): reflect them back verbatim without labeling — "Here's what you gave me: [verbatim]. Saved. Come back when you're ready to dig in." Don't force structure onto nothing.
 
